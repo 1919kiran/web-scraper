@@ -2,6 +2,7 @@ import requests
 import csv
 import time
 import credentials
+from random import randint
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -32,28 +33,33 @@ def extract_session_cookie():
     options.add_argument("--start-maximized")
     driver = webdriver.Chrome(options=options)
     driver.get(login_url)
-    driver.find_element_by_xpath("""/html/body/div[4]/div/div/div/div[1]/div/div[2]/form/div[2]/input""") \
-        .send_keys(login_payload.get("email"))
-    driver.find_element_by_xpath("""/html/body/div[4]/div/div/div/div[1]/div/div[2]/form/div[3]/button""").click()
+    email_xpath = """//*[@id="overlay"]/div/div[1]/div/div[2]/form/div[2]/input"""
+    email_button_xpath = """//*[@id="overlay"]/div/div[1]/div/div[2]/form/div[3]/button"""
+    password_xpath = """//*[@id="overlay"]/div/div[1]/div/div[2]/form/div[2]/div[2]/input"""
+    password_button_xpath = """//*[@id="overlay"]/div/div[1]/div/div[2]/form/div[3]/button"""
+    driver.find_element_by_xpath(email_xpath).send_keys(login_payload.get("email"))
+    driver.find_element_by_xpath(email_button_xpath).click()
+
     element = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((
-            By.XPATH, """/html/body/div[4]/div/div/div/div[1]/div/div[2]/form/div[2]/div[2]/input"""))
+            By.XPATH, password_xpath))
     )
-    driver.find_element_by_xpath("""/html/body/div[4]/div/div/div/div[1]/div/div[2]/form/div[2]/div[2]/input""") \
-        .send_keys(login_payload.get("password"))
-    driver.find_element_by_xpath("""/html/body/div[4]/div/div/div/div[1]/div/div[2]/form/div[3]/button""").click()
+    driver.find_element_by_xpath(password_xpath).send_keys(login_payload.get("password"))
+    driver.find_element_by_xpath(password_button_xpath).click()
+
     time.sleep(10)
     result = driver.execute_script("""
                 return document.cookie.split(";")[8];
             """)
-    print(result)
-    return result
+    return result.split('=')[1]
 
 
 def login_with_credentials(yocket_session):
     session = requests.session()
-    session.cookies['yocket_session'] = credentials.get_yocket_session()
-    session.post(login_url, data=login_payload, headers=dict(referer=login_url))
+    session.cookies['yocket_session'] = yocket_session
+    # randomize ip in header
+    session.post(login_url, data=login_payload,
+                 headers={'X-Forwarded-For': '.'.join([str(randint(0, 255)) for x in range(4)])})
     print("Logged in with email: " + login_payload.get("email"))
     return session
 
@@ -64,7 +70,9 @@ def scrape_results(session, input):
     uni_name = uni_dict.get(input).split(";")[0]
     course = uni_dict.get(input).split(";")[1]
     file_name = uni_name + ".csv"
-    writer = csv.writer(open("datasets/"+file_name, 'w', newline=''))
+    writer = csv.writer(open("datasets/" + file_name, 'w', newline=''))
+    writer.writerow("UNIVERSITY", "COURSE", "PERIOD", "MARKS", "SYSTEM", "COLLEGE", "GRE", "ENGLISH TEST"
+                    , "ENGLISH SCORE", "EXPERIENCE", "STATUS", "NAME", "PROFILE LINK")
 
     # iterating for admits
     i = 1
@@ -101,6 +109,7 @@ def scrape_results(session, input):
         i += 1
     print("Scraping completed")
 
+
 def extract_applicant_details(element, uni_name, course, status):
     applicant = applicants.Applicant()
     other_details = element.find_all("div", class_="col-sm-3")
@@ -121,16 +130,24 @@ def extract_applicant_details(element, uni_name, course, status):
     return str(applicant)
 
 
+def extract_additional_details(session):
+    reader = csv.DictReader(open("datasets/University of Southern California.csv"))
+    for raw in reader:
+        print(raw.get("PROFILE LINK"))
+
+
 def out_to_html(response):
     f = open("html.html", "w")
     f.write(str(response))
 
 
 def main():
-    print(uni_dict)
+    # print(uni_dict)
     # result = extract_session_cookie()
-    session = login_with_credentials("str(result)")
-    scrape_results(session, 588)
+    # session = login_with_credentials(result)
+    # scrape_results(session, 135)
+    extract_additional_details("session")
+    # session.close()
 
 
 if __name__ == '__main__':
